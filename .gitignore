@@ -1,0 +1,8 @@
+/vendor
+/node_modules
+.env
+.env.backup
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/logs/*
+/public/storage

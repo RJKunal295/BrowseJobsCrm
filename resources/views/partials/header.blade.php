@@ -1,0 +1,422 @@
+<!-- Topbar Start -->
+<header class="navbar-header">
+	<div class="page-container topbar-menu">
+		<div class="d-flex align-items-center gap-2">
+
+			<!-- Logo -->
+			<a href="{{ url('/') }}" class="logo">
+
+				<!-- Logo Normal -->
+				<span class="logo-light">
+					<span class="logo-lg"><img src="{{ asset('build/assets/img/logo.svg') }}" alt="logo"></span>
+					<span class="logo-sm"><img src="{{ asset('build/assets/img/logo-small.svg') }}" alt="small logo"></span>
+				</span>
+
+				<!-- Logo Dark -->
+				<span class="logo-dark">
+					<span class="logo-lg"><img src="{{ asset('build/assets/img/logo-white.svg') }}" alt="dark logo"></span>
+				</span>
+			</a>
+
+			<!-- Sidebar Mobile Button -->
+			<a id="mobile_btn" class="mobile-btn" href="#sidebar">
+				<i class="ti ti-menu-deep fs-24"></i>
+			</a>
+
+			<button class="sidenav-toggle-btn btn border-0 p-0" id="toggle_btn2">
+				<i class="ti ti-arrow-bar-to-right"></i>
+			</button>
+
+			<!-- Search -->
+			<div class="me-auto d-flex align-items-center header-search d-lg-flex d-none">
+				<!-- Search -->
+				<div class="input-icon position-relative me-2">
+					<input type="text" class="form-control" placeholder="Search Keyword">
+					<span class="input-icon-addon d-inline-flex p-0 header-search-icon"><i
+							class="ti ti-command"></i></span>
+				</div>
+				<!-- /Search -->
+			</div>
+
+		</div>
+
+		<div class="d-flex align-items-center">
+
+			<!-- Search for Mobile -->
+			<div class="header-item d-flex d-lg-none me-2">
+				<button class="topbar-link btn" data-bs-toggle="modal" data-bs-target="#searchModal"
+					type="button">
+					<i class="ti ti-search fs-16"></i>
+				</button>
+			</div>
+
+			<!-- Minimize -->
+			<div class="header-item">
+				<div class="dropdown me-2">
+					<a href="javascript:void(0);" class="btn topbar-link btnFullscreen"><i
+							class="ti ti-maximize"></i></a>
+				</div>
+			</div>
+			<!-- Minimize -->
+
+			<!-- Light/Dark Mode Button -->
+			<div class="header-item d-none d-sm-flex me-2">
+				<button class="topbar-link btn topbar-link" id="light-dark-mode" type="button">
+					<i class="ti ti-moon fs-16"></i>
+				</button>
+			</div>
+
+			<!-- pages -->
+			<div class="header-item d-none d-sm-flex">
+				<div class="dropdown me-2">
+					<a href="javascript:void(0);" class="btn topbar-link topbar-teal-link"
+						data-bs-toggle="dropdown">
+						<i class="ti ti-layout-grid-add"></i>
+					</a>
+					<div class="dropdown-menu dropdown-menu-end dropdown-menu-md p-2">
+
+						<!-- Item-->
+						<a href="{{ url('contacts') }}" class="dropdown-item">
+							<div class="d-flex align-items-center justify-content-between">
+								<div>
+									<span class="d-flex mb-1 fw-semibold text-dark">Contacts</span>
+									<span class="fs-13">View All the Contacts</span>
+								</div>
+								<i class="ti ti-chevron-right-pipe text-dark"></i>
+							</div>
+						</a>
+
+						<!-- Item-->
+						<a href="{{ url('pipeline') }}" class="dropdown-item">
+							<div class="d-flex align-items-center justify-content-between">
+								<div>
+									<span class="d-flex mb-1 fw-semibold text-dark">Pipeline</span>
+									<span class="fs-13">View All the Pipeline</span>
+								</div>
+								<i class="ti ti-chevron-right-pipe text-dark"></i>
+							</div>
+						</a>
+
+						<!-- Item-->
+						<a href="{{ url('activities') }}" class="dropdown-item">
+							<div class="d-flex align-items-center justify-content-between">
+								<div>
+									<span class="d-flex mb-1 fw-semibold text-dark">Activities</span>
+									<span class="fs-13">Activities</span>
+								</div>
+								<i class="ti ti-chevron-right-pipe text-dark"></i>
+							</div>
+						</a>
+
+						<!-- Item-->
+						<a href="{{ url('analytics') }}" class="dropdown-item">
+							<div class="d-flex align-items-center justify-content-between">
+								<div>
+									<span class="d-flex mb-1 fw-semibold text-dark">Analytics</span>
+									<span class="fs-13">Analytics</span>
+								</div>
+								<i class="ti ti-chevron-right-pipe text-dark"></i>
+							</div>
+						</a>
+
+					</div>
+				</div>
+			</div>
+
+			<!-- faq -->
+			<div class="header-item d-none d-sm-flex">
+				<div class="dropdown me-2">
+					<a href="{{ url('faq') }}" class="btn topbar-link topbar-indigo-link"><i
+							class="ti ti-help-hexagon"></i></a>
+				</div>
+			</div>
+
+			<!-- report -->
+			<div class="header-item d-none d-sm-flex">
+				<div class="dropdown me-2">
+					<a href="{{ url('lead-reports') }}" class="btn topbar-link topbar-warning-link"><i
+							class="ti ti-chart-pie"></i></a>
+				</div>
+			</div>
+
+			<div class="header-line"></div>
+
+			<!-- message -->
+			<div class="header-item">
+				<div class="dropdown me-2">
+					<a href="{{ url('chat') }}" class="btn topbar-link">
+						<i class="ti ti-message-circle-exclamation"></i>
+						<span class="badge rounded-pill">&nbsp;</span>
+					</a>
+				</div>
+			</div>
+
+			<!-- Enable Push Notifications Button -->
+			<div class="header-item">
+				<button type="button" id="enable-push-btn" class="btn btn-sm btn-outline-primary d-none me-2">
+					<i class="ti ti-bell-ringing me-1"></i> Enable Push
+				</button>
+			</div>
+
+			<!-- Notification Dropdown -->
+			<div class="header-item">
+				<div class="dropdown me-2">
+
+					<button class="topbar-link btn topbar-link dropdown-toggle drop-arrow-none"
+						data-bs-toggle="dropdown" data-bs-offset="0,24" type="button" aria-haspopup="false"
+						aria-expanded="false">
+						<i class="ti ti-bell-check fs-18 animate-ring"></i>
+						<span id="notif-badge" class="badge rounded-pill {{ $headerUnreadCount > 0 ? '' : 'd-none' }}">
+							{{ $headerUnreadCount }}
+						</span>
+					</button>
+
+					<div class="dropdown-menu p-0 dropdown-menu-end dropdown-menu-lg"
+						style="min-height: 200px;">
+
+						<div class="p-2 border-bottom d-flex align-items-center justify-content-between">
+							<h6 class="m-0 fs-16 fw-semibold">Notifications</h6>
+							<form method="POST" action="{{ route('notifications.read-all') }}">
+								@csrf
+								<button type="submit" class="btn btn-link btn-sm p-0 fs-12">Mark all as read</button>
+							</form>
+						</div>
+
+						<!-- Notification Body -->
+						<div id="notif-list" class="notification-body position-relative z-2 rounded-0" data-simplebar>
+							@forelse ($headerNotifications as $n)
+								<a href="{{ route('notifications.read', $n->id) }}"
+									class="dropdown-item notification-item py-3 text-wrap border-bottom d-block text-decoration-none {{ $n->read_at ? '' : 'bg-light' }}">
+									<div class="d-flex">
+										<div class="me-2 position-relative flex-shrink-0">
+											<i class="{{ $n->data['icon'] ?? 'ti ti-bell' }} fs-20"></i>
+										</div>
+										<div class="flex-grow-1">
+											<p class="mb-0 fw-medium text-dark">{{ $n->data['title'] ?? 'Notification' }}</p>
+											<p class="mb-1 text-wrap fs-13">{{ $n->data['message'] ?? '' }}</p>
+											<span class="fs-12"><i class="ti ti-clock me-1"></i>{{ $n->created_at->diffForHumans() }}</span>
+										</div>
+									</div>
+								</a>
+							@empty
+								<div class="p-3 text-center text-muted fs-13">No notifications yet.</div>
+							@endforelse
+						</div>
+
+						<!-- View All-->
+						<div class="p-2 rounded-bottom border-top text-center">
+							<a href="{{ route('notifications.index') }}"
+								class="text-center text-decoration-underline fs-14 mb-0">
+								View All Notifications
+							</a>
+						</div>
+
+					</div>
+				</div>
+			</div>
+
+			<!-- User Dropdown -->
+			<div class="dropdown profile-dropdown d-flex align-items-center justify-content-center">
+				<a href="javascript:void(0);"
+					class="topbar-link dropdown-toggle drop-arrow-none position-relative"
+					data-bs-toggle="dropdown" data-bs-offset="0,22" aria-haspopup="false" aria-expanded="false">
+					<img src="{{ asset('build/assets/img/users/user-40.jpg') }}" width="38" class="rounded-1 d-flex"
+						alt="user-image">
+					<span class="online text-success"><i
+							class="ti ti-circle-filled d-flex bg-white rounded-circle border border-1 border-white"></i></span>
+				</a>
+				<div class="dropdown-menu dropdown-menu-end dropdown-menu-md p-2">
+
+					<div class="d-flex align-items-center bg-light rounded-3 p-2 mb-2">
+						<img src="{{ asset('build/assets/img/users/user-40.jpg') }}" class="rounded-circle" width="42" height="42"
+							alt="Img">
+						<div class="ms-2">
+							<p class="fw-medium text-dark mb-0">{{ auth()->user()->full_name ?? 'Katherine Brooks' }}</p>
+							<span class="d-block fs-13">Installer</span>
+						</div>
+					</div>
+
+					<!-- Item-->
+					<a href="{{ url('profile-settings') }}" class="dropdown-item">
+						<i class="ti ti-user-circle me-1 align-middle"></i>
+						<span class="align-middle">Profile Settings</span>
+					</a>
+
+					<!-- item -->
+					<div
+						class="form-check form-switch form-check-reverse d-flex align-items-center justify-content-between dropdown-item mb-0">
+						<label class="form-check-label" for="notify"><i
+								class="ti ti-bell"></i>Notifications</label>
+						<input class="form-check-input me-0" type="checkbox" role="switch" id="notify">
+					</div>
+
+					<!-- Item-->
+					<a href="javascript:void(0);" class="dropdown-item">
+						<i class="ti ti-help-circle me-1 align-middle"></i>
+						<span class="align-middle">Help & Support</span>
+					</a>
+
+					<!-- Item-->
+					<a href="{{ url('profile-settings') }}" class="dropdown-item">
+						<i class="ti ti-settings me-1 align-middle"></i>
+						<span class="align-middle">Settings</span>
+					</a>
+
+					<!-- Item-->
+					<div class="pt-2 mt-2 border-top">
+						<form method="POST" action="{{ route('logout') }}">
+							@csrf
+							<button type="submit" class="dropdown-item text-danger border-0 bg-transparent w-100 text-start">
+								<i class="ti ti-logout me-1 fs-17 align-middle"></i>
+								<span class="align-middle">Sign Out</span>
+							</button>
+						</form>
+					</div>
+				</div>
+			</div>
+
+		</div>
+	</div>
+</header>
+@push('scripts')
+	<script>
+		(function () {
+			const VAPID_PUBLIC_KEY = "{{ config('webpush.vapid.public_key') }}";
+			const enableBtn = document.getElementById('enable-push-btn');
+
+			function urlBase64ToUint8Array(base64String) {
+				const padding = '='.repeat((4 - base64String.length % 4) % 4);
+				const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+				const rawData = window.atob(base64);
+				return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
+			}
+
+			async function subscribeToPush() {
+				const registration = await navigator.serviceWorker.ready;
+
+				const subscription = await registration.pushManager.subscribe({
+					userVisibleOnly: true,
+					applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+				});
+
+				await fetch("{{ route('push-subscriptions.store') }}", {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+					},
+					body: JSON.stringify(subscription),
+				});
+
+				enableBtn.classList.add('d-none');
+			}
+
+			async function init() {
+				if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+					console.warn('Push notifications not supported in this browser.');
+					return;
+				}
+
+				await navigator.serviceWorker.register('/service-worker.js');
+
+				const registration = await navigator.serviceWorker.ready;
+				const existingSubscription = await registration.pushManager.getSubscription();
+
+				if (existingSubscription) {
+					return; // already subscribed on this browser
+				}
+
+				if (Notification.permission === 'granted') {
+					subscribeToPush();
+				} else if (Notification.permission !== 'denied') {
+					// Show the button instead of prompting immediately — browsers
+					// dislike permission prompts that fire on page load unprompted.
+					enableBtn.classList.remove('d-none');
+				}
+			}
+
+			enableBtn.addEventListener('click', async function () {
+				const permission = await Notification.requestPermission();
+				if (permission === 'granted') {
+					subscribeToPush();
+				}
+			});
+
+			init();
+		})();
+	</script>
+@endpush
+<!-- Topbar End -->
+
+<!-- Search Modal -->
+<div class="modal fade" id="searchModal">
+	<div class="modal-dialog modal-lg">
+		<div class="modal-content bg-transparent">
+			<div class="card shadow-none mb-0">
+				<div class="px-3 py-2 d-flex flex-row align-items-center" id="search-top">
+					<i class="ti ti-search fs-22"></i>
+					<input type="search" class="form-control border-0" placeholder="Search">
+					<button type="button" class="btn p-0" data-bs-dismiss="modal" aria-label="Close"><i
+							class="ti ti-x fs-22"></i></button>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+@push('scripts')
+	<script>
+		// Polls every 20s for new notifications and refreshes the bell badge
+		// + dropdown list without a full page reload. Not true push/WebSocket
+		// real-time, but near-instant in practice for an internal HR tool.
+		(function () {
+			const POLL_URL = "{{ route('notifications.poll') }}";
+			const READ_ALL_URL = "{{ route('notifications.read-all') }}";
+			const badge = document.getElementById('notif-badge');
+			const list = document.getElementById('notif-list');
+
+			function iconHtml(icon) {
+				return `<i class="${icon} fs-20"></i>`;
+			}
+
+			function render(items) {
+				if (!items.length) {
+					list.innerHTML = '<div class="p-3 text-center text-muted fs-13">No notifications yet.</div>';
+					return;
+				}
+
+				list.innerHTML = items.map(function (n) {
+					const unreadClass = n.is_read ? '' : 'bg-light';
+					return `
+						<a href="/notifications/${n.id}/read" class="dropdown-item notification-item py-3 text-wrap border-bottom d-block text-decoration-none ${unreadClass}">
+							<div class="d-flex">
+								<div class="me-2 position-relative flex-shrink-0">${iconHtml(n.icon)}</div>
+								<div class="flex-grow-1">
+									<p class="mb-0 fw-medium text-dark">${n.title}</p>
+									<p class="mb-1 text-wrap fs-13">${n.message}</p>
+									<span class="fs-12"><i class="ti ti-clock me-1"></i>${n.time}</span>
+								</div>
+							</div>
+						</a>`;
+				}).join('');
+			}
+
+			function poll() {
+				fetch(POLL_URL, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+					.then(function (res) { return res.json(); })
+					.then(function (data) {
+						if (data.unread_count > 0) {
+							badge.textContent = data.unread_count;
+							badge.classList.remove('d-none');
+						} else {
+							badge.classList.add('d-none');
+						}
+						render(data.items);
+					})
+					.catch(function () { /* silent fail — next poll will retry */ });
+			}
+
+			setInterval(poll, 20000);
+		})();
+	</script>
+@endpush
