@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -12,7 +13,7 @@ use NotificationChannels\WebPush\HasPushSubscriptions;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, SoftDeletes, HasPushSubscriptions;
+    use HasFactory, HasPushSubscriptions, Notifiable, SoftDeletes;
 
     protected $fillable = [
         // Basic Information
@@ -108,6 +109,16 @@ class User extends Authenticatable
     public function hasPermission(string $slug): bool
     {
         return $this->role?->hasPermission($slug) ?? false;
-    }  
+    }
 
+    /**
+     * Limit a query to users whose role matches one of the given role codes.
+     *
+     * @param  Builder<User>  $query
+     * @param  array<int, string>  $codes
+     */
+    public function scopeWithRoleCode($query, array $codes)
+    {
+        return $query->whereHas('role', fn ($q) => $q->whereIn('role_code', $codes));
+    }
 }

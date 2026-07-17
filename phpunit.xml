@@ -28,6 +28,12 @@
         <env name="DB_URL" value=""/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
+        <!-- Never hit real external providers during tests. -->
+        <env name="CALLER_DIGITAL_AUTO_CALL" value="false"/>
+        <env name="CALLER_DIGITAL_EMAIL" value=""/>
+        <env name="CALLER_DIGITAL_API_KEY" value=""/>
+        <env name="WHATSAPP_ACCESS_TOKEN" value=""/>
+        <env name="LEAD_CAPTURE_TOKEN" value="test-token"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>

@@ -13,9 +13,7 @@ class NewChatMessage extends Notification
 {
     use Queueable;
 
-    public function __construct(public Message $message)
-    {
-    }
+    public function __construct(public Message $message) {}
 
     /**
      * @return array<int, string|object>
@@ -32,10 +30,10 @@ class NewChatMessage extends Notification
         $senderName = $this->message->sender->full_name ?? 'Someone';
 
         return [
-            'title'   => $isGroup ? ($conversation->name ?? 'Group Chat') : $senderName,
-            'message' => ($isGroup ? "{$senderName}: " : '') . Str::limit($this->message->body, 80),
-            'url'     => route('chat.index', ['conversation' => $conversation->id]),
-            'icon'    => 'ti ti-message-circle',
+            'title' => $isGroup ? ($conversation->name ?? 'Group Chat') : $senderName,
+            'message' => ($isGroup ? "{$senderName}: " : '').Str::limit($this->message->body, 80),
+            'url' => route('chat.index', ['conversation' => $conversation->id]),
+            'icon' => 'ti ti-message-circle',
         ];
     }
 
@@ -48,9 +46,14 @@ class NewChatMessage extends Notification
         return (new WebPushMessage)
             ->title($isGroup ? ($conversation->name ?? 'Group Chat') : $senderName)
             ->icon('/build/assets/img/logo-small.svg')
-            ->body(($isGroup ? "{$senderName}: " : '') . Str::limit($this->message->body, 100))
+            ->body(($isGroup ? "{$senderName}: " : '').Str::limit($this->message->body, 100))
             ->action('View', 'view')
             ->data(['url' => route('chat.index', ['conversation' => $conversation->id])])
-            ->options(['TTL' => 1000]);
+            // Unique tag per message — reusing a tag makes the browser silently
+            // REPLACE the notification still in the tray (Firefox never re-alerts).
+            ->tag('chat-msg-'.$this->message->id)
+            // High urgency so FCM/Mozilla deliver immediately instead of
+            // batching while the device looks idle or is in battery saver.
+            ->options(['TTL' => 1000, 'urgency' => 'high']);
     }
 }

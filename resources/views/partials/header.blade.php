@@ -176,14 +176,17 @@
 
 						<div class="p-2 border-bottom d-flex align-items-center justify-content-between">
 							<h6 class="m-0 fs-16 fw-semibold">Notifications</h6>
-							<form method="POST" action="{{ route('notifications.read-all') }}">
-								@csrf
-								<button type="submit" class="btn btn-link btn-sm p-0 fs-12">Mark all as read</button>
-							</form>
+							<div class="d-flex align-items-center gap-2">
+								<button type="button" id="test-push-btn" class="btn btn-link btn-sm p-0 fs-12">Test push</button>
+								<form method="POST" action="{{ route('notifications.read-all') }}">
+									@csrf
+									<button type="submit" class="btn btn-link btn-sm p-0 fs-12">Mark all as read</button>
+								</form>
+							</div>
 						</div>
 
 						<!-- Notification Body -->
-						<div id="notif-list" class="notification-body position-relative z-2 rounded-0" data-simplebar>
+						<div id="notif-list" class="notification-body rounded-0" style="max-height: 360px; overflow-y: auto;">
 							@forelse ($headerNotifications as $n)
 								<a href="{{ route('notifications.read', $n->id) }}"
 									class="dropdown-item notification-item py-3 text-wrap border-bottom d-block text-decoration-none {{ $n->read_at ? '' : 'bg-light' }}">
@@ -291,14 +294,11 @@
 				return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
 			}
 
-			async function subscribeToPush() {
-				const registration = await navigator.serviceWorker.ready;
-
-				const subscription = await registration.pushManager.subscribe({
-					userVisibleOnly: true,
-					applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-				});
-
+			// POST the subscription to the server. Runs on every subscribe AND
+			// once per session for existing subscriptions, so the server row is
+			// always current — even after a DB prune or a different user logging
+			// in on this browser.
+			async function syncSubscription(subscription) {
 				await fetch("{{ route('push-subscriptions.store') }}", {
 					method: 'POST',
 					headers: {
@@ -307,8 +307,19 @@
 					},
 					body: JSON.stringify(subscription),
 				});
+			}
 
-				enableBtn.classList.add('d-none');
+			async function subscribeToPush() {
+				const registration = await navigator.serviceWorker.ready;
+
+				const subscription = await registration.pushManager.subscribe({
+					userVisibleOnly: true,
+					applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+				});
+
+				await syncSubscription(subscription);
+
+				if (enableBtn) enableBtn.classList.add('d-none');
 			}
 
 			async function init() {
@@ -317,32 +328,67 @@
 					return;
 				}
 
-				await navigator.serviceWorker.register('/service-worker.js');
+				// updateViaCache 'none' + update() make every page load pick up a
+				// changed service-worker.js (which then self-activates immediately).
+				const swRegistration = await navigator.serviceWorker.register('/service-worker.js', { updateViaCache: 'none' });
+				swRegistration.update().catch(function () { /* offline — next load retries */ });
 
 				const registration = await navigator.serviceWorker.ready;
 				const existingSubscription = await registration.pushManager.getSubscription();
 
-				if (existingSubscription) {
-					return; // already subscribed on this browser
-				}
+				// Key the sync flag by user so switching accounts in the same
+				// browser reassigns the subscription to the new user.
+				const syncKey = 'push-synced-{{ auth()->id() }}';
 
 				if (Notification.permission === 'granted') {
-					subscribeToPush();
-				} else if (Notification.permission !== 'denied') {
-					// Show the button instead of prompting immediately — browsers
-					// dislike permission prompts that fire on page load unprompted.
-					enableBtn.classList.remove('d-none');
+					if (!existingSubscription) {
+						await subscribeToPush();
+					} else if (!sessionStorage.getItem(syncKey)) {
+						await syncSubscription(existingSubscription);
+						sessionStorage.setItem(syncKey, '1');
+					}
+					return;
 				}
+
+				// Permission not granted yet ('default' or 'denied'). Browsers
+				// suppress permission prompts that aren't caused by a click, so
+				// show the button and let the user trigger the prompt themselves.
+				if (enableBtn) enableBtn.classList.remove('d-none');
 			}
 
-			enableBtn.addEventListener('click', async function () {
-				const permission = await Notification.requestPermission();
-				if (permission === 'granted') {
-					subscribeToPush();
-				}
-			});
+			// "Test push" sends a real web push to yourself so you can verify
+			// this exact browser + Windows will show the banner and play sound.
+			const testPushBtn = document.getElementById('test-push-btn');
+			if (testPushBtn) {
+				testPushBtn.addEventListener('click', function () {
+					fetch("{{ route('push-subscriptions.test') }}", {
+						method: 'POST',
+						headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+					})
+						.then(function (res) { return res.json(); })
+						.then(function (data) {
+							if (!data.success) {
+								alert(data.message || 'Could not send the test notification.');
+							}
+						})
+						.catch(function () { alert('Test push request failed — is the server running?'); });
+				});
+			}
 
-			init();
+			if (enableBtn) {
+				enableBtn.addEventListener('click', async function () {
+					if (Notification.permission === 'denied') {
+						alert("Notifications are blocked for this site. Allow them in your browser's site settings (padlock icon in the address bar), then click Enable Push again.");
+						return;
+					}
+					const permission = await Notification.requestPermission();
+					if (permission === 'granted') {
+						subscribeToPush();
+					}
+				});
+			}
+
+			init().catch(function (e) { console.warn('Push setup failed:', e); });
 		})();
 	</script>
 @endpush
@@ -401,6 +447,38 @@
 				}).join('');
 			}
 
+			// ---- Notification sound (foreground) ----
+			let lastUnread = null;
+			let notifyCtx = null;
+			function primeAudio() {
+				try {
+					notifyCtx = notifyCtx || new (window.AudioContext || window.webkitAudioContext)();
+					if (notifyCtx.state === 'suspended') notifyCtx.resume();
+				} catch (e) { /* audio unsupported */ }
+			}
+			window.addEventListener('click', primeAudio, { once: true });
+			window.addEventListener('keydown', primeAudio, { once: true });
+			function playNotificationSound() {
+				try {
+					if (!notifyCtx) primeAudio();
+					if (!notifyCtx || notifyCtx.state !== 'running') return;
+					const ctx = notifyCtx;
+					const o = ctx.createOscillator();
+					const g = ctx.createGain();
+					o.connect(g); g.connect(ctx.destination);
+					o.type = 'sine'; o.frequency.value = 880;
+					g.gain.setValueAtTime(0.001, ctx.currentTime);
+					g.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.02);
+					g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+					o.start(); o.stop(ctx.currentTime + 0.5);
+				} catch (e) { /* audio not allowed until user interacts */ }
+			}
+
+			// The service worker asks us to chime when a push arrives while a tab is open.
+			navigator.serviceWorker && navigator.serviceWorker.addEventListener('message', function (e) {
+				if (e.data && e.data.type === 'play-notification-sound') playNotificationSound();
+			});
+
 			function poll() {
 				fetch(POLL_URL, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
 					.then(function (res) { return res.json(); })
@@ -411,11 +489,15 @@
 						} else {
 							badge.classList.add('d-none');
 						}
+						// New notification arrived since last poll → chime.
+						if (lastUnread !== null && data.unread_count > lastUnread) playNotificationSound();
+						lastUnread = data.unread_count;
 						render(data.items);
 					})
 					.catch(function () { /* silent fail — next poll will retry */ });
 			}
 
+			poll();
 			setInterval(poll, 20000);
 		})();
 	</script>

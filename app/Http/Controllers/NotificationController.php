@@ -33,19 +33,19 @@ class NotificationController extends Controller
             ->get()
             ->map(function ($n) {
                 return [
-                    'id'      => $n->id,
-                    'title'   => $n->data['title'] ?? 'Notification',
+                    'id' => $n->id,
+                    'title' => $n->data['title'] ?? 'Notification',
                     'message' => $n->data['message'] ?? '',
-                    'url'     => $n->data['url'] ?? '#',
-                    'icon'    => $n->data['icon'] ?? 'ti ti-bell',
-                    'time'    => $n->created_at->diffForHumans(),
+                    'url' => $n->data['url'] ?? '#',
+                    'icon' => $n->data['icon'] ?? 'ti ti-bell',
+                    'time' => $n->created_at->diffForHumans(),
                     'is_read' => (bool) $n->read_at,
                 ];
             });
 
         return response()->json([
             'unread_count' => $user->unreadNotifications()->count(),
-            'items'        => $items,
+            'items' => $items,
         ]);
     }
 

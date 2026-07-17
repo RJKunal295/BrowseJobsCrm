@@ -2,6 +2,7 @@
 /node_modules
 .env
 .env.backup
+A_____CRM.zip
 /storage/framework/cache/*
 /storage/framework/sessions/*
 /storage/logs/*

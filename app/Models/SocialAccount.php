@@ -10,22 +10,23 @@ class SocialAccount extends Model
 {
     protected $fillable = [
         'platform', 'label', 'ig_user_id', 'channel_id', 'username', 'account_type',
-        'profile_picture_url', 'biography', 'following_count',
-        'access_token', 'token_expires_at', 'last_synced_at',
+        'profile_picture_url', 'biography', 'following_count', 'followers_count',
+        'access_token', 'refresh_token', 'token_expires_at', 'last_synced_at',
         'is_active', 'last_error', 'created_by',
     ];
 
     protected $hidden = [
-        'access_token',
+        'access_token', 'refresh_token',
     ];
 
     protected function casts(): array
     {
         return [
-            'access_token'     => 'encrypted',
+            'access_token' => 'encrypted',
+            'refresh_token' => 'encrypted',
             'token_expires_at' => 'datetime',
-            'last_synced_at'   => 'datetime',
-            'is_active'        => 'boolean',
+            'last_synced_at' => 'datetime',
+            'is_active' => 'boolean',
         ];
     }
 

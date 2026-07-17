@@ -206,13 +206,21 @@
 				const senderLabel = m.is_mine ? '' : `<div class="fs-11 fw-medium mb-1">${escapeHtml(m.sender_name)}</div>`;
 
 				return `
-					<div class="d-flex ${alignClass} mb-2">
+					<div class="d-flex ${alignClass} mb-2" data-message-id="${m.id}">
 						<div class="p-2 rounded ${bubbleClass}" style="max-width: 70%;">
 							${senderLabel}
 							<div>${escapeHtml(m.body)}</div>
 							<div class="fs-10 text-end mt-1 ${m.is_mine ? 'text-white-50' : 'text-muted'}">${m.time}</div>
 						</div>
 					</div>`;
+			}
+
+			// Append a message unless it's already on screen — the send response
+			// and the 4s poll can race and both deliver the same message.
+			function appendMessage(m) {
+				if (chatMessages.querySelector(`[data-message-id="${m.id}"]`)) return;
+				chatMessages.insertAdjacentHTML('beforeend', renderMessage(m));
+				lastMessageId = Math.max(lastMessageId, m.id);
 			}
 
 			function scrollToBottom() {
@@ -281,8 +289,7 @@
 				})
 					.then(res => res.json())
 					.then(message => {
-						chatMessages.insertAdjacentHTML('beforeend', renderMessage(message));
-						lastMessageId = message.id;
+						appendMessage(message);
 						scrollToBottom();
 						messageInput.value = '';
 					});
@@ -296,10 +303,7 @@
 					.then(res => res.json())
 					.then(data => {
 						if (data.messages.length) {
-							data.messages.forEach(m => {
-								chatMessages.insertAdjacentHTML('beforeend', renderMessage(m));
-							});
-							lastMessageId = data.messages[data.messages.length - 1].id;
+							data.messages.forEach(appendMessage);
 							scrollToBottom();
 						}
 					});

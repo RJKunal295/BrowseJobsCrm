@@ -9,9 +9,10 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // Widen the enum to include youtube. Raw SQL, since Laravel's schema
-        // builder doesn't have a clean cross-DB way to alter enum values.
-        DB::statement("ALTER TABLE social_accounts MODIFY platform ENUM('instagram', 'youtube') NOT NULL DEFAULT 'instagram'");
+        // Widen the enum to include youtube. Raw SQL (MySQL only) — sqlite stores enums as text.
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE social_accounts MODIFY platform ENUM('instagram', 'youtube') NOT NULL DEFAULT 'instagram'");
+        }
 
         Schema::table('social_accounts', function (Blueprint $table) {
             $table->string('channel_id')->nullable()->after('ig_user_id');
@@ -24,6 +25,8 @@ return new class extends Migration
             $table->dropColumn('channel_id');
         });
 
-        DB::statement("ALTER TABLE social_accounts MODIFY platform ENUM('instagram') NOT NULL DEFAULT 'instagram'");
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE social_accounts MODIFY platform ENUM('instagram') NOT NULL DEFAULT 'instagram'");
+        }
     }
 };
