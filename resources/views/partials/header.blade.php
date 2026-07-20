@@ -260,6 +260,12 @@
 					</a>
 
 					<!-- Item-->
+					<a href="{{ route('password.change') }}" class="dropdown-item">
+						<i class="ti ti-lock me-1 align-middle"></i>
+						<span class="align-middle">Change Password</span>
+					</a>
+
+					<!-- Item-->
 					<a href="{{ url('profile-settings') }}" class="dropdown-item">
 						<i class="ti ti-settings me-1 align-middle"></i>
 						<span class="align-middle">Settings</span>

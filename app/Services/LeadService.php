@@ -98,9 +98,15 @@ class LeadService
 
     /**
      * Auto-dial the AI agent for a new lead (unless disabled or the daily cap is hit).
+     * Skips leads that already have an AI call — the queued job and the
+     * leads:auto-call safety net must never double-dial the same person.
      */
     public function maybeAutoCall(Lead $lead, ?int $addedByUserId): void
     {
+        if ($lead->calls()->where('type', 'ai')->exists()) {
+            return;
+        }
+
         if (config('services.caller_digital.auto_call') && $this->caller->isConfigured() && ! $this->aiCallCapReached()) {
             $this->triggerAiCall($lead, $addedByUserId);
         }

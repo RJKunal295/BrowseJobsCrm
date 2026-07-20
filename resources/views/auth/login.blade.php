@@ -76,7 +76,7 @@
                                             </label>
                                         </div>
                                         <div class="text-end">
-                                            <a href="" class="link-danger fw-medium link-hover">Forgot Password?</a>
+                                            <a href="{{ route('password.forgot') }}" class="link-danger fw-medium link-hover">Forgot Password?</a>
                                         </div>
                                     </div>
                                     <div class="mb-3">

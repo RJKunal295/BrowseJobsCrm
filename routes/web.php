@@ -24,6 +24,7 @@ use App\Http\Controllers\MenuItemController;
 use App\Http\Controllers\MilestoneController;
 use App\Http\Controllers\NotesController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PasswordController;
 use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\RolePermissionController;
@@ -45,6 +46,13 @@ Route::get('/', function () {
 Route::get('/login', [LoginController::class, 'loginForm'])->name('login.show');
 Route::post('/login', [LoginController::class, 'login'])->name('login');
 Route::post('/logout', [LoginController::class, 'logout'])->name('logout');
+
+// Forgot password (guest) — email OTP flow. Throttled: OTP emails cost + brute-force guard.
+Route::get('/forgot-password', [PasswordController::class, 'showForgot'])->name('password.forgot');
+Route::post('/forgot-password/send-otp', [PasswordController::class, 'sendForgotOtp'])
+    ->middleware('throttle:5,10')->name('password.forgot.send');
+Route::post('/forgot-password/reset', [PasswordController::class, 'resetWithOtp'])
+    ->middleware('throttle:10,10')->name('password.forgot.reset');
 
 // Public legal pages (used as the app's Privacy Policy URL for LinkedIn / Google / Meta).
 Route::view('/privacy-policy', 'legal.privacy-policy')->name('privacy-policy');
@@ -98,6 +106,13 @@ Route::middleware(['auth'])->group(function () {
     });
     // Deliberately NOT named "push-subscriptions" in the URL — ad blockers
     // (uBlock, AdGuard, Brave) block requests matching that pattern.
+    // Change password (logged in) — verified with an email OTP.
+    Route::get('change-password', [PasswordController::class, 'showChange'])->name('password.change');
+    Route::post('change-password/send-otp', [PasswordController::class, 'sendChangeOtp'])
+        ->middleware('throttle:5,10')->name('password.change.send');
+    Route::post('change-password', [PasswordController::class, 'changeWithOtp'])
+        ->middleware('throttle:10,10')->name('password.change.update');
+
     Route::post('browser-alerts/register', [PushSubscriptionController::class, 'store'])->name('push-subscriptions.store');
     Route::post('browser-alerts/test', [PushSubscriptionController::class, 'sendTest'])->name('push-subscriptions.test');
     Route::post('browser-alerts/diag', [PushSubscriptionController::class, 'diag'])->name('push-subscriptions.diag');

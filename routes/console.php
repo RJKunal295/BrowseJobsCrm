@@ -62,9 +62,15 @@ Schedule::command('social:check-inactivity')->everyFourHours();
 // AI call result sync — fallback when the Caller.Digital webhook can't reach this server.
 Schedule::command('calls:sync')->everyTenMinutes();
 
+// Safety net: any lead still in "New" with no AI call (missed job, downtime,
+// imports) gets its auto-call within 10 minutes.
+Schedule::command('leads:auto-call')->everyTenMinutes();
+
 // Drain queued jobs (lead emails/WhatsApp/auto-call, campaigns) every minute.
 // --stop-when-empty + --max-time keep it from becoming a stuck long-running
 // process; withoutOverlapping stops two workers running at once.
+// withoutOverlapping(2): if a worker is ever killed mid-run, its stale lock
+// self-heals in 2 minutes (the default is 24 HOURS of silently skipped runs).
 Schedule::command('queue:work --stop-when-empty --tries=3 --max-time=50')
     ->everyMinute()
-    ->withoutOverlapping();
+    ->withoutOverlapping(2);
