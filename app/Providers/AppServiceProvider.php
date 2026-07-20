@@ -3,8 +3,11 @@
 namespace App\Providers;
 
 use App\Models\MenuItem;
+use Illuminate\Notifications\Events\NotificationFailed;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -42,5 +45,16 @@ class AppServiceProvider extends ServiceProvider
         });
 
         Paginator::useBootstrapFive();
+
+        // Web-push (and other channel) delivery failures are silent by default —
+        // log them so "user X never got the notification" is diagnosable.
+        Event::listen(NotificationFailed::class, function (NotificationFailed $event) {
+            Log::warning('Notification delivery failed', [
+                'user_id' => $event->notifiable->id ?? null,
+                'channel' => is_string($event->channel) ? $event->channel : get_class($event->channel),
+                'notification' => get_class($event->notification),
+                'data' => $event->data,
+            ]);
+        });
     }
 }

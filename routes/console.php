@@ -37,6 +37,14 @@ Schedule::command('social:fetch-stats')->hourly();
 // Remember: Windows/XAMPP needs Task Scheduler running
 // `php artisan schedule:run` every minute — same setup as your task reminders.
 
+// Daily standup: WhatsApp + web-push the meeting link 5 minutes before the
+// 9:30 call. Weekdays only — add ->saturdays() etc. if the team stands up then.
+Schedule::command('standup:remind')->weekdays()->dailyAt('09:25');
+
+// Analyze new Google Meet transcripts (attendance + AI report) shortly after
+// the standup and periodically through the day for other recorded meetings.
+Schedule::command('meetings:analyze')->everyThirtyMinutes();
+
 // ---- Login reminders (Feature 1) ----
 // Mid-morning: nudge anyone who has not logged in yet (skips Sundays + holidays).
 Schedule::command('logins:remind')->weekdays()->dailyAt('11:00');
@@ -53,3 +61,10 @@ Schedule::command('social:check-inactivity')->everyFourHours();
 
 // AI call result sync — fallback when the Caller.Digital webhook can't reach this server.
 Schedule::command('calls:sync')->everyTenMinutes();
+
+// Drain queued jobs (lead emails/WhatsApp/auto-call, campaigns) every minute.
+// --stop-when-empty + --max-time keep it from becoming a stuck long-running
+// process; withoutOverlapping stops two workers running at once.
+Schedule::command('queue:work --stop-when-empty --tries=3 --max-time=50')
+    ->everyMinute()
+    ->withoutOverlapping();

@@ -322,11 +322,29 @@
 				if (enableBtn) enableBtn.classList.add('d-none');
 			}
 
+			// Report push-setup progress to the server log so problems on any
+			// user's machine are diagnosable without their browser console.
+			function diag(step, detail) {
+				try {
+					fetch("{{ route('push-subscriptions.diag') }}", {
+						method: 'POST',
+						keepalive: true,
+						headers: {
+							'Content-Type': 'application/json',
+							'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+						},
+						body: JSON.stringify({ step: step, detail: String(detail || '') }),
+					}).catch(function () {});
+				} catch (e) { /* diagnostics must never break the flow */ }
+			}
+
 			async function init() {
 				if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-					console.warn('Push notifications not supported in this browser.');
+					diag('unsupported', navigator.userAgent);
 					return;
 				}
+
+				diag('init-start', 'permission=' + Notification.permission);
 
 				// updateViaCache 'none' + update() make every page load pick up a
 				// changed service-worker.js (which then self-activates immediately).
@@ -336,16 +354,25 @@
 				const registration = await navigator.serviceWorker.ready;
 				const existingSubscription = await registration.pushManager.getSubscription();
 
-				// Key the sync flag by user so switching accounts in the same
-				// browser reassigns the subscription to the new user.
-				const syncKey = 'push-synced-{{ auth()->id() }}';
+				// Track WHO the browser's subscription was last synced for. Any
+				// time the logged-in user differs (fresh session OR an account
+				// switch A→B→A), re-sync so pushes follow the current user.
+				const currentUserId = '{{ auth()->id() }}';
+				const lastSyncedUser = sessionStorage.getItem('push-synced-user');
+
+				diag('sw-ready', 'hasSub=' + !!existingSubscription + ' lastSynced=' + lastSyncedUser + ' endpoint=' + (existingSubscription ? existingSubscription.endpoint.slice(0, 60) : '-'));
 
 				if (Notification.permission === 'granted') {
 					if (!existingSubscription) {
 						await subscribeToPush();
-					} else if (!sessionStorage.getItem(syncKey)) {
+						sessionStorage.setItem('push-synced-user', currentUserId);
+						diag('subscribed-new', '');
+					} else if (lastSyncedUser !== currentUserId) {
 						await syncSubscription(existingSubscription);
-						sessionStorage.setItem(syncKey, '1');
+						sessionStorage.setItem('push-synced-user', currentUserId);
+						diag('resynced', 'from=' + lastSyncedUser);
+					} else {
+						diag('already-synced', '');
 					}
 					return;
 				}
@@ -353,6 +380,7 @@
 				// Permission not granted yet ('default' or 'denied'). Browsers
 				// suppress permission prompts that aren't caused by a click, so
 				// show the button and let the user trigger the prompt themselves.
+				diag('permission-not-granted', Notification.permission);
 				if (enableBtn) enableBtn.classList.remove('d-none');
 			}
 
@@ -388,7 +416,7 @@
 				});
 			}
 
-			init().catch(function (e) { console.warn('Push setup failed:', e); });
+			init().catch(function (e) { diag('init-failed', (e && e.name) + ': ' + (e && e.message)); console.warn('Push setup failed:', e); });
 		})();
 	</script>
 @endpush

@@ -11,11 +11,21 @@
 				<a href="{{ url('/') }}" class="text-muted">Home</a> &gt; <span>CRM / Leads</span>
 			</nav>
 		</div>
-		@if ($canCreate)
-			<button type="button" class="btn btn-primary" onclick="openLeadModal()">
-				<i class="ti ti-plus me-1"></i> Add Lead
-			</button>
-		@endif
+		<div class="d-flex gap-2">
+			@if (in_array(auth()->user()->role->role_code ?? '', ['SUPER_ADMIN', 'ADMIN', 'HEAD_OF_OPERATIONS', 'HR_MANAGER'], true))
+				<a href="{{ route('meeting-reports.index') }}" class="btn btn-outline-primary">
+					<i class="ti ti-report-analytics me-1"></i> Meeting Reports
+				</a>
+				<a href="{{ route('leads.performance') }}" class="btn btn-outline-primary">
+					<i class="ti ti-chart-bar me-1"></i> HR Performance
+				</a>
+			@endif
+			@if ($canCreate)
+				<button type="button" class="btn btn-primary" onclick="openLeadModal()">
+					<i class="ti ti-plus me-1"></i> Add Lead
+				</button>
+			@endif
+		</div>
 	</div>
 
 	@foreach (['success' => 'success', 'error' => 'danger'] as $key => $type)
@@ -75,10 +85,10 @@
 				<table class="table table-bordered table-nowrap">
 					<thead class="table-white">
 						<tr>
-							<th>Lead</th><th>Mobile</th><th>Source</th><th>Status</th><th>Assigned To</th><th>Created</th><th>Action</th>
+							<th>Lead</th><th>Mobile</th><th>Source</th><th>Status</th><th>AI Call</th><th>Assigned To</th><th>Created</th><th>Action</th>
 						</tr>
 					</thead>
-					<tbody>
+					<tbody id="leads-tbody">
 						@forelse ($leads as $lead)
 							<tr>
 								<td>
@@ -92,17 +102,35 @@
 										<span class="badge" style="background: {{ $lead->status->color ?: '#6c757d' }}; color:#fff;">{{ $lead->status->name }}</span>
 									@else — @endif
 								</td>
+								<td>
+									@php $aiCall = $lead->calls->first(); @endphp
+									@if (! $aiCall)
+										<span class="badge bg-light text-muted">Not triggered</span>
+									@else
+										@php
+											$aiBadge = match ($aiCall->status) {
+												'completed' => 'bg-success',
+												'queued', 'ringing', 'in_progress' => 'bg-info',
+												'failed' => 'bg-danger',
+												default => 'bg-warning',
+											};
+										@endphp
+										<span class="badge {{ $aiBadge }}" title="{{ $aiCall->started_at?->format('d M Y h:i A') }}">
+											{{ ucwords(str_replace('_', ' ', $aiCall->status)) }}
+										</span>
+									@endif
+								</td>
 								<td>{{ $lead->assignee->full_name ?? '—' }}</td>
 								<td>{{ $lead->created_at->format('d M Y') }}</td>
 								<td><a href="{{ route('leads.show', $lead) }}" class="btn btn-sm btn-icon btn-outline-light"><i class="ti ti-eye"></i></a></td>
 							</tr>
 						@empty
-							<tr><td colspan="7" class="text-center py-4">No leads found.</td></tr>
+							<tr><td colspan="8" class="text-center py-4">No leads found.</td></tr>
 						@endforelse
 					</tbody>
 				</table>
 			</div>
-			<div class="mt-3">{{ $leads->links() }}</div>
+			<div class="mt-3" id="leads-pagination">{{ $leads->links() }}</div>
 		</div>
 	</div>
 
@@ -110,7 +138,7 @@
 	<div class="modal fade" id="leadModal" tabindex="-1">
 		<div class="modal-dialog">
 			<div class="modal-content">
-				<form method="POST" action="{{ route('leads.store') }}">
+				<form method="POST" action="{{ route('leads.store') }}" id="lead-form">
 					@csrf
 					<div class="modal-header">
 						<h5 class="modal-title">Add Lead</h5>
@@ -120,6 +148,7 @@
 						@if ($isMediaStrategist)
 							<div class="alert alert-info fs-13 py-2"><i class="ti ti-info-circle me-1"></i> As a Media Strategist, only a mobile number is required.</div>
 						@endif
+						<div id="lead-form-feedback"></div>
 						<div class="mb-3">
 							<label class="form-label">Mobile <span class="text-danger">*</span></label>
 							<input type="text" name="mobile" class="form-control" placeholder="+91..." required>
@@ -152,5 +181,89 @@
 	<script>
 		function openLeadModal() { new bootstrap.Modal(document.getElementById('leadModal')).show(); }
 		@if ($errors->any()) document.addEventListener('DOMContentLoaded', openLeadModal); @endif
+
+		// Fast add: submit via AJAX (no page reload), then clear the form and
+		// keep the modal open so the next lead can be typed immediately.
+		(function () {
+			const form = document.getElementById('lead-form');
+			const feedback = document.getElementById('lead-form-feedback');
+			if (!form) return;
+
+			form.addEventListener('submit', function (e) {
+				e.preventDefault();
+				const submitBtn = form.querySelector('button[type="submit"]');
+				submitBtn.disabled = true;
+				feedback.innerHTML = '';
+
+				fetch(form.action, {
+					method: 'POST',
+					headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+					body: new FormData(form),
+				})
+					.then(async res => {
+						const data = await res.json();
+						if (res.ok && data.success) {
+							form.reset();
+							feedback.innerHTML = '<div class="alert alert-success fs-13 py-2"><i class="ti ti-check me-1"></i>Lead added — team is being notified in the background. Add another or close.</div>';
+							form.querySelector('input[name="mobile"]').focus();
+							if (window.refreshLeadsTable) window.refreshLeadsTable();
+						} else if (res.status === 422) {
+							const messages = Object.values(data.errors || {}).flat().join('<br>');
+							feedback.innerHTML = '<div class="alert alert-danger fs-13 py-2">' + (messages || 'Please check the form.') + '</div>';
+						} else {
+							feedback.innerHTML = '<div class="alert alert-danger fs-13 py-2">Could not save the lead — please try again.</div>';
+						}
+					})
+					.catch(() => {
+						feedback.innerHTML = '<div class="alert alert-danger fs-13 py-2">Network problem — the lead was not saved. Try again.</div>';
+					})
+					.finally(() => { submitBtn.disabled = false; });
+			});
+		})();
+
+		// Auto-refresh: poll for changes to the visible lead set every 10s and
+		// swap the table in place (filters, pagination, and scroll preserved).
+		(function () {
+			const POLL_URL = "{{ route('leads.poll') }}";
+			let fingerprint = null;
+
+			function typingOrModalOpen() {
+				if (document.querySelector('.modal.show')) return true;
+				const el = document.activeElement;
+				return el && ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName);
+			}
+
+			async function refreshTable() {
+				const html = await fetch(window.location.href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } }).then(r => r.text());
+				const doc = new DOMParser().parseFromString(html, 'text/html');
+				const newBody = doc.getElementById('leads-tbody');
+				const newPagination = doc.getElementById('leads-pagination');
+				if (newBody) document.getElementById('leads-tbody').innerHTML = newBody.innerHTML;
+				if (newPagination) document.getElementById('leads-pagination').innerHTML = newPagination.innerHTML;
+			}
+			// Let the add-lead modal trigger an immediate refresh after saving.
+			window.refreshLeadsTable = () => refreshTable().catch(() => {});
+
+			async function check() {
+				try {
+					const res = await fetch(POLL_URL, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+					if (!res.ok) return;
+					const data = await res.json();
+					const key = data.latest_id + '|' + data.total + '|' + data.last_change;
+
+					if (fingerprint === null) {
+						fingerprint = key;
+						return;
+					}
+					if (key !== fingerprint && !typingOrModalOpen()) {
+						fingerprint = key;
+						await refreshTable();
+					}
+				} catch (e) { /* offline or server restart — next poll retries */ }
+			}
+
+			check();
+			setInterval(check, 10000);
+		})();
 	</script>
 @endpush

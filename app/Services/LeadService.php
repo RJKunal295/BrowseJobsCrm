@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\ProcessNewLeadJob;
 use App\Mail\GenericMail;
 use App\Mail\LeadCreatedMail;
 use App\Models\Lead;
@@ -9,7 +10,10 @@ use App\Models\LeadCall;
 use App\Models\LeadStatus;
 use App\Models\LeadStatusHistory;
 use App\Models\User;
+use App\Notifications\LeadAssignedNotification;
+use App\Notifications\LeadCreatedNotification;
 use App\Notifications\LeadEventNotification;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 
@@ -31,7 +35,9 @@ class LeadService
     ) {}
 
     /**
-     * Create a lead, set its initial status, notify the team, and (if enabled) auto-place an AI call.
+     * Create a lead, set its initial status, and notify the team. Only the
+     * instant channels (bell + web-push) run inline so the add is fast; the
+     * slow work (emails, WhatsApp, auto AI call) is queued to the background.
      *
      * @param  array{mobile: string, name?: ?string, email?: ?string, campaign_name?: ?string}  $data
      */
@@ -47,14 +53,68 @@ class LeadService
             'current_status_id' => $this->initialStatusId(),
         ]);
 
-        $this->notifyLeadCreated($lead);
+        $this->pushLeadCreated($lead);
 
-        // Auto-dial the AI agent the moment the lead is generated (unless the daily cap is hit).
+        ProcessNewLeadJob::dispatch($lead->id, $addedByUserId);
+
+        return $lead;
+    }
+
+    /**
+     * Instant channels for a new lead: in-app bell + web-push banner.
+     */
+    public function pushLeadCreated(Lead $lead): void
+    {
+        foreach ($this->leadCreatedRecipients() as $user) {
+            $user->notify(new LeadCreatedNotification($lead));
+        }
+    }
+
+    /**
+     * Slow channels for a new lead: email + WhatsApp, recorded per recipient.
+     * Runs from the queued ProcessNewLeadJob, not during the web request.
+     */
+    public function emailAndWhatsAppLeadCreated(Lead $lead): void
+    {
+        foreach ($this->leadCreatedRecipients() as $user) {
+            if (filled($user->email)) {
+                try {
+                    Mail::to($user->email)->send(new LeadCreatedMail($lead));
+                    $this->recordNotification($lead->id, $user->id, 'email');
+                } catch (\Throwable $e) {
+                    // don't let a mail failure break lead capture
+                }
+            }
+
+            $number = $user->whatsapp_number ?: $user->phone;
+            if (filled($number)) {
+                $sent = $this->whatsApp->sendText($number, $this->whatsAppMessage($lead));
+                if ($sent) {
+                    $this->recordNotification($lead->id, $user->id, 'whatsapp');
+                }
+            }
+        }
+    }
+
+    /**
+     * Auto-dial the AI agent for a new lead (unless disabled or the daily cap is hit).
+     */
+    public function maybeAutoCall(Lead $lead, ?int $addedByUserId): void
+    {
         if (config('services.caller_digital.auto_call') && $this->caller->isConfigured() && ! $this->aiCallCapReached()) {
             $this->triggerAiCall($lead, $addedByUserId);
         }
+    }
 
-        return $lead;
+    /**
+     * @return Collection<int, User>
+     */
+    private function leadCreatedRecipients()
+    {
+        return User::query()
+            ->withRoleCode(self::NOTIFY_ROLE_CODES)
+            ->where('is_active', true)
+            ->get();
     }
 
     /**
@@ -116,44 +176,6 @@ class LeadService
     }
 
     /**
-     * Email + WhatsApp the configured admin roles, and record each notification.
-     */
-    public function notifyLeadCreated(Lead $lead): void
-    {
-        $recipients = User::query()
-            ->withRoleCode(self::NOTIFY_ROLE_CODES)
-            ->where('is_active', true)
-            ->get();
-
-        foreach ($recipients as $user) {
-            if (filled($user->email)) {
-                try {
-                    Mail::to($user->email)->send(new LeadCreatedMail($lead));
-                    $this->recordNotification($lead->id, $user->id, 'email');
-                } catch (\Throwable $e) {
-                    // don't let a mail failure break lead capture
-                }
-            }
-
-            $number = $user->whatsapp_number ?: $user->phone;
-            if (filled($number)) {
-                $sent = $this->whatsApp->sendText($number, $this->whatsAppMessage($lead));
-                if ($sent) {
-                    $this->recordNotification($lead->id, $user->id, 'whatsapp');
-                }
-            }
-
-            // In-app bell + web-push (for monitoring).
-            $user->notify(new LeadEventNotification(
-                'New lead generated',
-                ($lead->name ?: $lead->mobile).' — '.($lead->source ?: 'manual'),
-                route('leads.show', $lead->id),
-                'ti ti-user-plus',
-            ));
-        }
-    }
-
-    /**
      * Notify the HR user a lead was assigned to — email + WhatsApp + web-push (with sound).
      */
     public function notifyLeadAssigned(Lead $lead, User $assignee, ?User $assignedBy): void
@@ -163,7 +185,7 @@ class LeadService
         $title = 'New lead assigned to you';
         $message = $lead->displayName().' ('.$lead->mobile.') assigned by '.$by.'. Please follow up.';
 
-        $assignee->notify(new LeadEventNotification($title, $message, $url, 'ti ti-user-check'));
+        $assignee->notify(new LeadAssignedNotification($lead, $assignedBy));
 
         if (filled($assignee->email)) {
             try {

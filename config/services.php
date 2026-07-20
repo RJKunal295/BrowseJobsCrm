@@ -61,6 +61,8 @@ return [
         'access_token' => env('WHATSAPP_ACCESS_TOKEN'),
         'api_version' => env('WHATSAPP_API_VERSION', 'v21.0'),
         'default_country_code' => env('WHATSAPP_DEFAULT_COUNTRY_CODE', '91'),
+        // Shared secret Meta echoes back when verifying the webhook Callback URL.
+        'webhook_verify_token' => env('WHATSAPP_WEBHOOK_VERIFY_TOKEN'),
     ],
 
     'linkedin' => [
@@ -90,6 +92,42 @@ return [
         'auto_call' => env('CALLER_DIGITAL_AUTO_CALL', true),
         // Max AI calls allowed per day (0 = unlimited). Guards against runaway cost.
         'daily_cap' => (int) env('CALLER_DIGITAL_DAILY_CAP', 0),
+    ],
+
+    // Meeting intelligence: Google Drive folder where Meet saves recordings +
+    // transcripts. Share the folder with the service-account email, then put
+    // its folder id here. meetings:analyze picks up new transcripts from it.
+    'meetings' => [
+        'transcripts_folder_id' => env('MEET_TRANSCRIPTS_FOLDER_ID'),
+    ],
+
+    // Daily standup reminder (standup:remind, scheduled in routes/console.php).
+    'standup' => [
+        'meet_link' => env('STANDUP_MEET_LINK'),
+        'time' => env('STANDUP_TIME', '9:30 AM'),
+    ],
+
+    // AI lead analysis — pick any provider(s) by adding its API key. Providers
+    // without a key simply don't appear in the UI (graceful no-op pattern).
+    'ai_analysis' => [
+        'anthropic' => [
+            'label' => 'Claude (Anthropic)',
+            'api_key' => env('ANTHROPIC_API_KEY'),
+            'model' => env('ANTHROPIC_MODEL', 'claude-opus-4-8'),
+            'base_url' => env('ANTHROPIC_BASE_URL', 'https://api.anthropic.com'),
+        ],
+        'openai' => [
+            'label' => 'ChatGPT (OpenAI)',
+            'api_key' => env('OPENAI_API_KEY'),
+            'model' => env('OPENAI_MODEL', 'gpt-4o'),
+            'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
+        ],
+        'kimi' => [
+            'label' => 'Kimi (Moonshot AI)',
+            'api_key' => env('KIMI_API_KEY'),
+            'model' => env('KIMI_MODEL', 'kimi-latest'),
+            'base_url' => env('KIMI_BASE_URL', 'https://api.moonshot.ai/v1'),
+        ],
     ],
 
 ];

@@ -51,6 +51,11 @@ class Lead extends Model
         return $this->hasMany(LeadStatusHistory::class)->latest();
     }
 
+    public function aiAnalyses(): HasMany
+    {
+        return $this->hasMany(LeadAiAnalysis::class)->latest();
+    }
+
     public function displayName(): string
     {
         return $this->name ?: $this->mobile;

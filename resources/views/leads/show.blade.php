@@ -138,6 +138,59 @@
 
 		<!-- Right: calls + history -->
 		<div class="col-lg-8">
+			<!-- AI Lead Analysis -->
+			<div class="card mb-3">
+				<div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+					<h6 class="mb-0"><i class="ti ti-sparkles me-1 text-primary"></i>AI Lead Analysis</h6>
+					@if (count($aiProviders))
+						<div class="d-flex align-items-center gap-2">
+							<select id="ai-provider" class="form-select form-select-sm" style="width:auto;">
+								@foreach ($aiProviders as $key => $label)
+									<option value="{{ $key }}">{{ $label }}</option>
+								@endforeach
+							</select>
+							<button type="button" id="ai-analyze-btn" class="btn btn-primary btn-sm">
+								<i class="ti ti-analyze me-1"></i>Analyze this lead
+							</button>
+						</div>
+					@endif
+				</div>
+				<div class="card-body">
+					@if (! count($aiProviders))
+						<div class="text-muted fs-13">
+							<i class="ti ti-info-circle me-1"></i>No AI provider configured yet. Add
+							<code>ANTHROPIC_API_KEY</code> (Claude), <code>OPENAI_API_KEY</code> (ChatGPT), or
+							<code>KIMI_API_KEY</code> (Kimi) to <code>.env</code> to enable analysis.
+						</div>
+					@else
+						<div id="ai-analysis-status" class="d-none text-muted fs-13 mb-2">
+							<span class="spinner-border spinner-border-sm me-2"></span>Analyzing calls, transcripts and history — this can take up to a minute...
+						</div>
+						<div id="ai-analysis-error" class="alert alert-danger fs-13 py-2 d-none mb-2"></div>
+						<div id="ai-analysis-result" class="fs-14 {{ $aiAnalyses->isEmpty() ? 'd-none' : '' }}">
+							@if ($aiAnalyses->isNotEmpty())
+								@php $latest = $aiAnalyses->first(); @endphp
+								<div class="fs-12 text-muted mb-2" id="ai-analysis-meta">
+									{{ config("services.ai_analysis.{$latest->provider}.label", $latest->provider) }}
+									· {{ $latest->model }} · {{ $latest->created_at->format('d M Y, h:i A') }}
+									@if ($latest->requestedBy) · requested by {{ $latest->requestedBy->full_name }} @endif
+								</div>
+								<div id="ai-analysis-text" data-raw="{{ $latest->analysis }}"></div>
+							@else
+								<div class="fs-12 text-muted mb-2" id="ai-analysis-meta"></div>
+								<div id="ai-analysis-text" data-raw=""></div>
+							@endif
+						</div>
+						@if ($aiAnalyses->isEmpty())
+							<div id="ai-analysis-empty" class="text-muted fs-13">
+								No analysis yet. Pick a provider and click <strong>Analyze this lead</strong> — the AI reads every call
+								transcript and the status timeline, then explains why the lead has or hasn't converted and what to do next.
+							</div>
+						@endif
+					@endif
+				</div>
+			</div>
+
 			<div class="card mb-3">
 				<div class="card-header"><h6 class="mb-0">Call history</h6></div>
 				<div class="card-body">
@@ -202,3 +255,81 @@
 	</div>
 
 @endsection
+
+@push('scripts')
+	<script>
+		// AI Lead Analysis — renders the markdown-ish AI output and calls the
+		// analysis endpoint without a page reload.
+		(function () {
+			const btn = document.getElementById('ai-analyze-btn');
+			if (!btn) return;
+
+			const statusEl = document.getElementById('ai-analysis-status');
+			const errorEl = document.getElementById('ai-analysis-error');
+			const resultEl = document.getElementById('ai-analysis-result');
+			const textEl = document.getElementById('ai-analysis-text');
+			const metaEl = document.getElementById('ai-analysis-meta');
+			const emptyEl = document.getElementById('ai-analysis-empty');
+
+			function esc(s) {
+				const d = document.createElement('div');
+				d.textContent = s;
+				return d.innerHTML;
+			}
+
+			// Minimal markdown: ## headings, **bold**, - bullets. Everything else stays text.
+			function renderMarkdown(raw) {
+				const html = esc(raw)
+					.replace(/^## (.*)$/gm, '<h6 class="mt-3 mb-2 text-primary">$1</h6>')
+					.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+					.replace(/^\s*[-•] (.*)$/gm, '<div class="d-flex gap-2 mb-1"><span>•</span><span>$1</span></div>')
+					.replace(/^\s*(\d+)\. (.*)$/gm, '<div class="d-flex gap-2 mb-1"><span>$1.</span><span>$2</span></div>')
+					.replace(/\n{2,}/g, '<br>');
+				return html;
+			}
+
+			// Render any analysis that was loaded with the page.
+			if (textEl && textEl.dataset.raw) {
+				textEl.innerHTML = renderMarkdown(textEl.dataset.raw);
+			}
+
+			btn.addEventListener('click', function () {
+				const provider = document.getElementById('ai-provider').value;
+				btn.disabled = true;
+				statusEl.classList.remove('d-none');
+				errorEl.classList.add('d-none');
+				if (emptyEl) emptyEl.classList.add('d-none');
+
+				fetch("{{ route('leads.ai-analysis', $lead) }}", {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						'Accept': 'application/json',
+						'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+					},
+					body: JSON.stringify({ provider: provider }),
+				})
+					.then(async res => {
+						const data = await res.json();
+						if (res.ok && data.success) {
+							textEl.innerHTML = renderMarkdown(data.analysis);
+							metaEl.textContent = data.provider + ' · ' + (data.model || '') + ' · ' + data.created_at;
+							resultEl.classList.remove('d-none');
+						} else {
+							errorEl.textContent = data.message || 'Analysis failed.';
+							errorEl.classList.remove('d-none');
+							if (emptyEl) emptyEl.classList.remove('d-none');
+						}
+					})
+					.catch(() => {
+						errorEl.textContent = 'Network error — the analysis may take a while; try again.';
+						errorEl.classList.remove('d-none');
+					})
+					.finally(() => {
+						btn.disabled = false;
+						statusEl.classList.add('d-none');
+					});
+			});
+		})();
+	</script>
+@endpush

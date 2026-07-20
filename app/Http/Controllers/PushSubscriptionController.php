@@ -34,6 +34,22 @@ class PushSubscriptionController extends Controller
     }
 
     /**
+     * Diagnostic beacon: the header push script reports each setup step here
+     * so push problems on any user's browser are visible in the server log.
+     */
+    public function diag(Request $request): JsonResponse
+    {
+        \Log::info('PUSH-DIAG', [
+            'user' => $request->user()->id,
+            'step' => (string) $request->input('step'),
+            'detail' => (string) $request->input('detail'),
+            'agent' => substr((string) $request->userAgent(), 0, 60),
+        ]);
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
      * Called from the browser after the user grants notification permission
      * and the Push API generates a subscription object.
      */
@@ -50,6 +66,11 @@ class PushSubscriptionController extends Controller
             $validated['keys']['p256dh'],
             $validated['keys']['auth']
         );
+
+        \Log::info('Push subscription synced', [
+            'user_id' => $request->user()->id,
+            'endpoint' => substr($validated['endpoint'], 0, 60),
+        ]);
 
         return response()->json(['success' => true]);
     }

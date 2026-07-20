@@ -19,6 +19,7 @@ use App\Http\Controllers\LeaveRequestController;
 use App\Http\Controllers\LeaveTypeController;
 use App\Http\Controllers\LoginReminderController;
 use App\Http\Controllers\MaintenanceController;
+use App\Http\Controllers\MeetingReportController;
 use App\Http\Controllers\MenuItemController;
 use App\Http\Controllers\MilestoneController;
 use App\Http\Controllers\NotesController;
@@ -34,6 +35,7 @@ use App\Http\Controllers\StudentController;
 use App\Http\Controllers\TaskController;
 use App\Http\Controllers\TodoController;
 use App\Http\Controllers\UserManagementController;
+use App\Http\Controllers\WhatsAppWebhookController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -53,6 +55,12 @@ Route::post('/api/leads/capture', [LeadController::class, 'apiCapture'])
     ->middleware('throttle:30,1')->name('leads.capture');
 Route::post('/webhooks/caller-digital', [CallerDigitalWebhookController::class, 'handle'])
     ->middleware('throttle:120,1')->name('webhooks.caller-digital');
+
+// Meta WhatsApp Cloud API webhook: GET = verification handshake, POST = events.
+Route::get('/webhooks/whatsapp', [WhatsAppWebhookController::class, 'verify'])
+    ->name('webhooks.whatsapp.verify');
+Route::post('/webhooks/whatsapp', [WhatsAppWebhookController::class, 'handle'])
+    ->middleware('throttle:300,1')->name('webhooks.whatsapp');
 
 // ---- User Management ----
 Route::middleware(['auth'])->group(function () {
@@ -88,9 +96,12 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/{id}/read', [NotificationController::class, 'markAsRead'])->name('read');
         Route::post('/mark-all-read', [NotificationController::class, 'markAllAsRead'])->name('read-all');
     });
-    Route::post('push-subscriptions', [PushSubscriptionController::class, 'store'])->name('push-subscriptions.store');
-    Route::post('push-subscriptions/test', [PushSubscriptionController::class, 'sendTest'])->name('push-subscriptions.test');
-    Route::delete('push-subscriptions', [PushSubscriptionController::class, 'destroy'])->name('push-subscriptions.destroy');
+    // Deliberately NOT named "push-subscriptions" in the URL — ad blockers
+    // (uBlock, AdGuard, Brave) block requests matching that pattern.
+    Route::post('browser-alerts/register', [PushSubscriptionController::class, 'store'])->name('push-subscriptions.store');
+    Route::post('browser-alerts/test', [PushSubscriptionController::class, 'sendTest'])->name('push-subscriptions.test');
+    Route::post('browser-alerts/diag', [PushSubscriptionController::class, 'diag'])->name('push-subscriptions.diag');
+    Route::delete('browser-alerts/register', [PushSubscriptionController::class, 'destroy'])->name('push-subscriptions.destroy');
 
     Route::resource('leave-types', LeaveTypeController::class)->only(['index', 'create', 'store', 'destroy']);
     Route::resource('holidays', HolidayController::class)->except(['show']);
@@ -196,11 +207,16 @@ Route::middleware(['auth'])->group(function () {
     // ---- Leads (CRM) ----
     Route::middleware('permission:view_leads')->group(function () {
         Route::get('leads', [LeadController::class, 'index'])->name('leads.index');
+        Route::get('leads/poll', [LeadController::class, 'poll'])->name('leads.poll');
+        Route::get('leads/performance', [LeadController::class, 'performance'])->name('leads.performance');
+        Route::get('meeting-reports', [MeetingReportController::class, 'index'])->name('meeting-reports.index');
+        Route::get('meeting-reports/{meetingReport}', [MeetingReportController::class, 'show'])->name('meeting-reports.show')->whereNumber('meetingReport');
         Route::post('leads', [LeadController::class, 'store'])->name('leads.store');
         Route::get('leads/{lead}', [LeadController::class, 'show'])->name('leads.show')->whereNumber('lead');
         Route::post('leads/{lead}/assign', [LeadController::class, 'assign'])->name('leads.assign')->whereNumber('lead');
         Route::patch('leads/{lead}/status', [LeadController::class, 'updateStatus'])->name('leads.status')->whereNumber('lead');
         Route::post('leads/{lead}/ai-call', [LeadController::class, 'triggerAiCall'])->name('leads.ai-call')->whereNumber('lead');
+        Route::post('leads/{lead}/ai-analysis', [LeadController::class, 'analyzeWithAi'])->name('leads.ai-analysis')->whereNumber('lead');
         Route::post('leads/{lead}/manual-call', [LeadController::class, 'storeManualCall'])->name('leads.manual-call')->whereNumber('lead');
         Route::get('lead-calls/{call}/audio', [LeadController::class, 'downloadAudio'])->name('leads.call-audio')->whereNumber('call');
     });

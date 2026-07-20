@@ -156,6 +156,46 @@ class GoogleDriveService
     }
 
     /**
+     * List (non-trashed) files inside a folder, newest first.
+     *
+     * @return array<int, array{id: string, name: string, mimeType: string, createdTime: string, webViewLink: ?string}>
+     */
+    public function listFilesInFolder(string $folderId, ?string $mimeType = null): array
+    {
+        $query = sprintf("'%s' in parents and trashed = false", $folderId);
+        if ($mimeType) {
+            $query .= sprintf(" and mimeType = '%s'", $mimeType);
+        }
+
+        $result = $this->service()->files->listFiles([
+            'q' => $query,
+            'fields' => 'files(id,name,mimeType,createdTime,webViewLink)',
+            'orderBy' => 'createdTime desc',
+            'pageSize' => 50,
+            'supportsAllDrives' => true,
+            'includeItemsFromAllDrives' => true,
+        ]);
+
+        return array_map(fn ($f) => [
+            'id' => $f->id,
+            'name' => $f->name,
+            'mimeType' => $f->mimeType,
+            'createdTime' => $f->createdTime,
+            'webViewLink' => $f->webViewLink ?? null,
+        ], $result->getFiles());
+    }
+
+    /**
+     * Export a Google Doc (e.g. a Meet transcript) as plain text.
+     */
+    public function exportAsText(string $fileId): string
+    {
+        $response = $this->service()->files->export($fileId, 'text/plain', ['alt' => 'media']);
+
+        return (string) $response->getBody();
+    }
+
+    /**
      * Parent folder id(s). Empty array = the account's Drive root (OAuth only).
      *
      * @return array<int, string>

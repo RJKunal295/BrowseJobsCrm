@@ -265,7 +265,8 @@
 						const url = new URL(window.location);
 						url.searchParams.set('conversation', id);
 						window.history.replaceState({}, '', url);
-					});
+					})
+					.catch(() => { /* navigation or brief server hiccup — retry by re-clicking */ });
 			}
 
 			chatList.addEventListener('click', function (e) {
@@ -292,6 +293,9 @@
 						appendMessage(message);
 						scrollToBottom();
 						messageInput.value = '';
+					})
+					.catch(() => {
+						alert('Message could not be sent — please check your connection and try again.');
 					});
 			});
 
@@ -306,7 +310,8 @@
 							data.messages.forEach(appendMessage);
 							scrollToBottom();
 						}
-					});
+					})
+					.catch(() => { /* transient network/server hiccup — next poll retries */ });
 			}, 4000);
 
 			// Refresh the sidebar (previews + unread badges) every 10s.
@@ -337,7 +342,8 @@
 								badge.remove();
 							}
 						});
-					});
+					})
+					.catch(() => { /* transient network/server hiccup — next poll retries */ });
 			}, 10000);
 
 			// Auto-open a conversation if one was passed via ?conversation=ID

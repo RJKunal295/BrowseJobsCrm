@@ -7,10 +7,13 @@ use App\Models\LeadCall;
 use App\Models\LeadStatus;
 use App\Models\LeadStatusHistory;
 use App\Models\User;
+use App\Services\AiLeadAnalysisService;
 use App\Services\CallerDigitalService;
 use App\Services\LeadService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -29,7 +32,10 @@ class LeadController extends Controller
 
     public function index(Request $request): View
     {
-        $query = Lead::with(['status', 'assignee', 'creator']);
+        $query = Lead::with(['status', 'assignee', 'creator',
+            // Latest AI call per lead, for the "AI Call" column.
+            'calls' => fn ($q) => $q->where('type', 'ai'),
+        ]);
 
         // Only "view all" roles see every lead; everyone else sees their own (assigned or added).
         if (! $this->canViewAll()) {
@@ -56,6 +62,11 @@ class LeadController extends Controller
             default => null,
         };
 
+        // Drill-down from the HR performance board: show one HR's leads.
+        if ($this->canViewAll() && $request->filled('assigned_user_id')) {
+            $query->where('assigned_to_user_id', $request->input('assigned_user_id'));
+        }
+
         $leads = $query->latest()->paginate(20)->withQueryString();
         $statuses = LeadStatus::orderBy('sort_order')->get();
         $sources = Lead::select('source')->whereNotNull('source')->distinct()->pluck('source');
@@ -70,9 +81,119 @@ class LeadController extends Controller
     }
 
     /**
+     * Lightweight poll used by the leads index to auto-refresh: returns a
+     * fingerprint of the current user's visible lead set (same role scoping
+     * as index) that changes whenever a lead is added, removed, or reassigned.
+     */
+    public function poll(): JsonResponse
+    {
+        $query = Lead::query();
+
+        if (! $this->canViewAll()) {
+            $uid = Auth::id();
+            $query->where(fn ($q) => $q->where('assigned_to_user_id', $uid)->orWhere('added_by_user_id', $uid));
+        }
+
+        return response()->json([
+            'latest_id' => (clone $query)->max('id'),
+            'total' => (clone $query)->count(),
+            'last_change' => (clone $query)->max('updated_at'),
+        ]);
+    }
+
+    /**
+     * HR performance board: HR_MANAGER (and the monitoring roles) see, per HR,
+     * how many leads were assigned, followed up, still untouched/overdue, calls
+     * made, conversions, and how fast they respond after an assignment.
+     */
+    public function performance(Request $request): View
+    {
+        abort_unless(in_array($this->roleCode(), self::CAN_ASSIGN_ROLES, true), 403);
+
+        $from = $request->filled('from') ? $request->date('from')->startOfDay() : null;
+        $to = $request->filled('to') ? $request->date('to')->endOfDay() : null;
+
+        $assignedLeads = function (int $userId) use ($from, $to) {
+            return Lead::where('assigned_to_user_id', $userId)
+                ->when($from, fn ($q) => $q->where('assigned_at', '>=', $from))
+                ->when($to, fn ($q) => $q->where('assigned_at', '<=', $to));
+        };
+
+        // A lead counts as "followed up" when its assignee logged a call on it
+        // or moved its status after it was assigned to them.
+        $followedUpFilter = function ($q, int $userId) {
+            $q->where(function ($q) use ($userId) {
+                $q->whereHas('calls', fn ($c) => $c->where('initiated_by_user_id', $userId)
+                    ->whereColumn('lead_calls.created_at', '>=', 'leads.assigned_at'))
+                    ->orWhereHas('statusHistory', fn ($h) => $h->where('changed_by_user_id', $userId)
+                        ->whereColumn('lead_status_history.created_at', '>=', 'leads.assigned_at'));
+            });
+        };
+
+        $rows = User::query()
+            ->withRoleCode(self::HR_ASSIGNABLE_ROLES)
+            ->where('is_active', true)
+            ->orderBy('full_name')
+            ->get()
+            ->map(function (User $hr) use ($assignedLeads, $followedUpFilter, $from, $to) {
+                $assigned = $assignedLeads($hr->id)->count();
+                $followedUp = $assignedLeads($hr->id)->tap(fn ($q) => $followedUpFilter($q, $hr->id))->count();
+                $overdue = $assignedLeads($hr->id)
+                    ->where('assigned_at', '<', now()->subDay())
+                    ->whereDoesntHave('status', fn ($q) => $q->whereIn('slug', ['joined', 'lost', 'not_interested', 'invalid_number']))
+                    ->whereNot(fn ($q) => $followedUpFilter($q, $hr->id))
+                    ->count();
+
+                $avgResponseMinutes = DB::selectOne('
+                    SELECT AVG(TIMESTAMPDIFF(MINUTE, l.assigned_at, fa.first_action)) AS avg_minutes
+                    FROM leads l
+                    JOIN (
+                        SELECT lead_id, MIN(created_at) AS first_action FROM (
+                            SELECT lead_id, created_at FROM lead_calls WHERE initiated_by_user_id = ?
+                            UNION ALL
+                            SELECT lead_id, created_at FROM lead_status_history WHERE changed_by_user_id = ?
+                        ) actions GROUP BY lead_id
+                    ) fa ON fa.lead_id = l.id
+                    WHERE l.assigned_to_user_id = ?
+                      AND l.assigned_at IS NOT NULL
+                      AND fa.first_action >= l.assigned_at
+                      '.($from ? 'AND l.assigned_at >= ?' : '').'
+                      '.($to ? 'AND l.assigned_at <= ?' : '').'
+                ', array_merge([$hr->id, $hr->id, $hr->id], $from ? [$from] : [], $to ? [$to] : []))->avg_minutes;
+
+                $lastActivity = collect([
+                    LeadCall::where('initiated_by_user_id', $hr->id)->max('created_at'),
+                    LeadStatusHistory::where('changed_by_user_id', $hr->id)->max('created_at'),
+                ])->filter()->max();
+
+                return (object) [
+                    'user' => $hr,
+                    'assigned' => $assigned,
+                    'followed_up' => $followedUp,
+                    'pending' => $assigned - $followedUp,
+                    'overdue' => $overdue,
+                    'calls' => LeadCall::where('initiated_by_user_id', $hr->id)->where('type', 'manual')
+                        ->when($from, fn ($q) => $q->where('created_at', '>=', $from))
+                        ->when($to, fn ($q) => $q->where('created_at', '<=', $to))
+                        ->count(),
+                    'interested' => $assignedLeads($hr->id)->whereHas('status', fn ($q) => $q->whereIn('slug', ['interested', 'follow_up']))->count(),
+                    'joined' => $assignedLeads($hr->id)->whereHas('status', fn ($q) => $q->where('slug', 'joined'))->count(),
+                    'avg_response_minutes' => $avgResponseMinutes !== null ? (int) round($avgResponseMinutes) : null,
+                    'last_activity' => $lastActivity ? Carbon::parse($lastActivity) : null,
+                ];
+            });
+
+        return view('leads.performance', [
+            'rows' => $rows,
+            'from' => $request->input('from'),
+            'to' => $request->input('to'),
+        ]);
+    }
+
+    /**
      * Manual add from the CRM. MEDIA_STRATEGIST needs only a mobile number; other roles need name + mobile.
      */
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request): RedirectResponse|JsonResponse
     {
         abort_unless($this->canCreate(), 403, 'Your role is not allowed to add leads.');
 
@@ -87,6 +208,10 @@ class LeadController extends Controller
         ]);
 
         $lead = $this->leads->create($validated, 'manual', Auth::id());
+
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'lead_id' => $lead->id]);
+        }
 
         return redirect()->route('leads.show', $lead)->with('success', 'Lead added and team notified.');
     }
@@ -107,6 +232,40 @@ class LeadController extends Controller
             'hrUsers' => User::query()->withRoleCode(self::HR_ASSIGNABLE_ROLES)->where('is_active', true)->orderBy('full_name')->get(),
             'canAssign' => in_array($this->roleCode(), self::CAN_ASSIGN_ROLES, true),
             'callConfigured' => app(CallerDigitalService::class)->isConfigured(),
+            'aiProviders' => app(AiLeadAnalysisService::class)->configuredProviders(),
+            'aiAnalyses' => $lead->aiAnalyses()->with('requestedBy')->take(5)->get(),
+        ]);
+    }
+
+    /**
+     * Run an AI analysis of this lead's calls/transcripts/history and return
+     * the feedback (why it didn't convert, approach issues, next actions).
+     */
+    public function analyzeWithAi(Request $request, Lead $lead, AiLeadAnalysisService $ai): JsonResponse
+    {
+        abort_unless(
+            $this->canViewAll() || $lead->assigned_to_user_id === Auth::id() || $lead->added_by_user_id === Auth::id(),
+            403
+        );
+
+        $validated = $request->validate(['provider' => 'required|string|in:anthropic,openai,kimi']);
+
+        try {
+            $analysis = $ai->analyze($lead, $validated['provider'], Auth::id());
+        } catch (\RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            \Log::error('AI lead analysis failed', ['lead_id' => $lead->id, 'error' => $e->getMessage()]);
+
+            return response()->json(['success' => false, 'message' => 'Analysis failed — check the server log.'], 500);
+        }
+
+        return response()->json([
+            'success' => true,
+            'analysis' => $analysis->analysis,
+            'provider' => $analysis->provider,
+            'model' => $analysis->model,
+            'created_at' => $analysis->created_at->format('d M Y, h:i A'),
         ]);
     }
 

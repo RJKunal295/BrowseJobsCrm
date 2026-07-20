@@ -20,7 +20,7 @@ class CheckSocialPostInactivity extends Command
 
     protected $description = 'Alert admins (email + WhatsApp) when a connected account has not posted in the last 24h; repeats daily until a new post appears.';
 
-    private const ADMIN_ROLE_CODES = ['SUPER_ADMIN', 'HEAD_OF_OPERATIONS', 'SOCIAL_MEDIA_MANAGER'];
+    private const ADMIN_ROLE_CODES = ['SUPER_ADMIN', 'ADMIN', 'HEAD_OF_OPERATIONS', 'SOCIAL_MEDIA_MANAGER'];
 
     /**
      * Minimum gap between reminders for the same account (hours). The check itself runs
